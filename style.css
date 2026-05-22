@@ -1,0 +1,72 @@
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family: system-ui, sans-serif; color: #eee; background: #000; }
+
+#sidebar {
+  position: absolute; top: 0; left: 0; bottom: 0; width: 300px;
+  background: rgba(20, 24, 32, 0.92); padding: 12px 14px;
+  overflow-y: auto; z-index: 10; box-sizing: border-box;
+  border-right: 1px solid #333;
+}
+#sidebar h1 { font-size: 16px; margin: 0 0 10px 0; letter-spacing: 1px; color: #9cf; }
+#sidebar #status { font-size: 11px; color: #888; margin: 6px 0 12px 0; }
+#sidebar input#search {
+  width: 100%; box-sizing: border-box; padding: 6px 8px;
+  background: #111; color: #eee; border: 1px solid #444; border-radius: 3px;
+  font-size: 13px;
+}
+#search-results {
+  max-height: 180px; overflow-y: auto; margin: 4px 0 8px 0;
+  font-size: 12px;
+}
+#search-results .result {
+  padding: 4px 6px; cursor: pointer; border-radius: 3px;
+}
+#search-results .result:hover { background: #234; }
+#search-results .result .nid { color: #888; margin-left: 6px; font-size: 10px; }
+
+#groups .group {
+  display: flex; align-items: center; padding: 4px 0;
+  font-size: 13px; cursor: pointer; user-select: none;
+}
+#groups .group input[type=checkbox] { margin-right: 8px; }
+#groups .group .swatch {
+  display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+  margin-right: 6px;
+}
+#groups .group .count { color: #888; margin-left: auto; font-size: 11px; }
+
+#legend { margin-top: 14px; font-size: 11px; color: #888; }
+#legend .hint { line-height: 1.4; }
+
+#passes { margin-top: 16px; padding-top: 12px; border-top: 1px solid #333; }
+#passes h2 { font-size: 13px; margin: 0 0 4px 0; color: #9cf; letter-spacing: 1px; }
+#passes .hint { font-size: 10px; color: #888; margin-bottom: 6px; }
+#passes .pass { font-size: 11px; padding: 5px 0; border-bottom: 1px solid #222; }
+#passes .pass:last-child { border-bottom: none; }
+#passes .pass-time { color: #eee; font-family: monospace; }
+#passes .pass-meta { color: #aaa; font-size: 10px; margin-top: 2px; }
+
+#cesium-container {
+  position: absolute; top: 0; left: 300px; right: 0; bottom: 0;
+}
+
+#tracking-chip {
+  position: absolute; top: 10px; right: 10px;
+  background: rgba(0, 80, 140, 0.85); color: #fff;
+  padding: 6px 10px; border-radius: 4px; font-size: 13px;
+  z-index: 20;
+}
+#tracking-chip button {
+  background: transparent; color: #fff; border: none; cursor: pointer;
+  font-size: 16px; margin-left: 8px; padding: 0 4px;
+}
+#tracking-chip button:hover { color: #faa; }
+
+/* move Cesium's animation + timeline widgets up to the top */
+.cesium-viewer-animationContainer {
+  top: 8px !important; bottom: auto !important; left: 8px !important;
+}
+.cesium-viewer-timelineContainer {
+  top: 8px !important; bottom: auto !important; left: 180px !important;
+  right: 8px !important;
+}
+.cesium-viewer-bottom { display: none; }

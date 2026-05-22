@@ -1,0 +1,11 @@
+# TLE data file is regenerated every 3 days by Refresh-TLEs.ps1 — don't track
+data/*.tle
+data/*.txt
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*~

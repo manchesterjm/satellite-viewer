@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Satellite Orbit Viewer</title>
+<link href="https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<link href="style.css" rel="stylesheet">
+</head>
+<body>
+<div id="sidebar">
+  <h1>Satellites</h1>
+  <input id="search" type="text" placeholder="Search name or NORAD ID...">
+  <div id="search-results"></div>
+  <div id="status"></div>
+  <div id="groups"></div>
+  <div id="legend">
+    <div class="hint">Click a satellite to lock camera. Esc or click empty space to release.</div>
+  </div>
+  <div id="passes" style="display:none"></div>
+</div>
+<div id="cesium-container"></div>
+<div id="tracking-chip" style="display:none">
+  Tracking: <span id="tracking-name"></span>
+  <button id="tracking-lock" title="Lock camera to satellite">🎯</button>
+  <button id="tracking-release" title="Release">&times;</button>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/Cesium/Cesium.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+<script>
+  window.CESIUM_BASE_URL = "https://cdn.jsdelivr.net/npm/cesium@1.121.0/Build/Cesium/";
+</script>
+<script src="app.js"></script>
+</body>
+</html>
