@@ -52,6 +52,33 @@ viewer.clock.multiplier   = 1;
 viewer.clock.shouldAnimate = true;
 viewer.timeline.zoomTo(viewer.clock.startTime, viewer.clock.stopTime);
 
+// ---------- Cloud cover overlay (CIMSS RealEarth) ----------
+// 3 geostationary satellites' clean-IR Band 13/09: G16 (Americas),
+// Met11 (Europe/Africa), Himawari (Asia/Pacific). EPSG:4326 tiles, ~30 min
+// update cadence, no API key needed. Each layer is transparent outside its
+// satellite's footprint, so overlaying all three gives near-global coverage.
+const CLOUD_PRODUCTS = ["G16-C-BAND13", "Met11-SEVIRI-FD-BAND09", "HIMAWARI-B13"];
+const cloudLayers = [];
+
+function setCloudCoverVisible(on) {
+  if (on) {
+    for (const product of CLOUD_PRODUCTS) {
+      const provider = new Cesium.UrlTemplateImageryProvider({
+        url: `https://realearth.ssec.wisc.edu/api/image?products=${product}&x={x}&y={y}&z={z}`,
+        tilingScheme: new Cesium.GeographicTilingScheme(),
+        maximumLevel: 8,
+        credit: "Imagery © UW-Madison SSEC / CIMSS RealEarth",
+      });
+      const layer = viewer.imageryLayers.addImageryProvider(provider);
+      layer.alpha = 0.6;
+      cloudLayers.push(layer);
+    }
+  } else {
+    for (const layer of cloudLayers) viewer.imageryLayers.remove(layer);
+    cloudLayers.length = 0;
+  }
+}
+
 // ---------- State ----------
 let ALL_SATS = [];                                 // parsed catalog
 const VISIBLE = new Set();                         // currently rendered
@@ -454,6 +481,9 @@ handler.setInputAction(event => {
 
 document.addEventListener("keydown", e => {
   if (e.key === "Escape") releaseTracking();
+});
+document.getElementById("cloud-toggle").addEventListener("change", e => {
+  setCloudCoverVisible(e.target.checked);
 });
 document.getElementById("tracking-release").addEventListener("click", releaseTracking);
 document.getElementById("tracking-lock").addEventListener("click", () => {

@@ -23,6 +23,16 @@ html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family:
 #search-results .result:hover { background: #234; }
 #search-results .result .nid { color: #888; margin-left: 6px; font-size: 10px; }
 
+.overlay-toggle {
+  display: flex; align-items: center; padding: 8px 0; margin: 4px 0;
+  font-size: 13px; cursor: pointer; user-select: none;
+  border-top: 1px solid #333; border-bottom: 1px solid #333;
+}
+.overlay-toggle input { margin-right: 8px; }
+.overlay-toggle .hint-inline {
+  color: #888; font-size: 10px; margin-left: auto;
+}
+
 #groups .group {
   display: flex; align-items: center; padding: 4px 0;
   font-size: 13px; cursor: pointer; user-select: none;
