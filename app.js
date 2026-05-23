@@ -176,9 +176,11 @@ const cloudLayers = [];
 
 function setCloudCoverVisible(on) {
   if (on) {
+    const keyParam = window.CIMSS_ACCESS_KEY
+      ? `&accesskey=${encodeURIComponent(window.CIMSS_ACCESS_KEY)}` : "";
     for (const product of CLOUD_PRODUCTS) {
       const provider = new Cesium.UrlTemplateImageryProvider({
-        url: `https://realearth.ssec.wisc.edu/api/image?products=${product}&x={x}&y={y}&z={z}`,
+        url: `https://realearth.ssec.wisc.edu/api/image?products=${product}&x={x}&y={y}&z={z}${keyParam}`,
         tilingScheme: new Cesium.GeographicTilingScheme(),
         maximumLevel: 8,
         credit: "Imagery © UW-Madison SSEC / CIMSS RealEarth",

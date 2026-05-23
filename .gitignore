@@ -2,6 +2,9 @@
 data/*.tle
 data/*.txt
 
+# Local secrets (CIMSS API key, etc.) — see config.local.example.js for template
+config.local.js
+
 # Editor / OS noise
 .vscode/
 .idea/
