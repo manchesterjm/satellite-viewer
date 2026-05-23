@@ -76,7 +76,9 @@ html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family:
   background: rgba(0, 80, 140, 0.85); color: #fff;
   padding: 6px 10px; border-radius: 4px; font-size: 13px;
   z-index: 20;
+  cursor: move; user-select: none;
 }
+#tracking-chip button { cursor: pointer; }
 #tracking-chip button {
   background: transparent; color: #fff; border: none; cursor: pointer;
   font-size: 16px; margin-left: 8px; padding: 0 4px;

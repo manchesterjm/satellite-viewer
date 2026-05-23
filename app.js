@@ -412,6 +412,7 @@ function releaseTracking() {
   if (groundTrack)   viewer.entities.remove(groundTrack);
   trackedEntity = null; orbitPolyline = null; footprint = null;
   groundTrack = null; trackedSat = null;
+  setCameraLock(false);
   hidePasses();
   viewer.trackedEntity = undefined;
   document.getElementById("tracking-chip").style.display = "none";
@@ -668,9 +669,7 @@ document.getElementById("cloud-toggle").addEventListener("change", e => {
   setCloudCoverVisible(e.target.checked);
 });
 document.getElementById("btn-center").addEventListener("click", () => {
-  // Release any tracking before flying home, otherwise the camera lock fights
-  // the fly-home animation.
-  if (viewer.trackedEntity) viewer.trackedEntity = undefined;
+  setCameraLock(false); // unlock before flying home
   viewer.camera.flyHome(1.2);
 });
 document.getElementById("btn-north").addEventListener("click", () => {
@@ -690,11 +689,63 @@ document.getElementById("twilight-toggle").addEventListener("change", e => {
   setTwilightVisible(e.target.checked);
 });
 document.getElementById("tracking-release").addEventListener("click", releaseTracking);
-document.getElementById("tracking-lock").addEventListener("click", () => {
-  if (trackedEntity) {
-    if (viewer.trackedEntity === trackedEntity) viewer.trackedEntity = undefined;
-    else viewer.trackedEntity = trackedEntity;
+
+// Make the tracking chip draggable around the screen. Buttons inside the chip
+// keep their click handlers (we ignore drag-starts on those elements).
+(function makeChipDraggable() {
+  const chip = document.getElementById("tracking-chip");
+  let dragging = false, ox = 0, oy = 0;
+  chip.addEventListener("mousedown", e => {
+    if (e.target.tagName === "BUTTON") return;
+    dragging = true;
+    const rect = chip.getBoundingClientRect();
+    ox = e.clientX - rect.left;
+    oy = e.clientY - rect.top;
+    e.preventDefault();
+  });
+  document.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    chip.style.left  = (e.clientX - ox) + "px";
+    chip.style.top   = (e.clientY - oy) + "px";
+    chip.style.right = "auto"; // override the CSS right: 10px once moved
+  });
+  document.addEventListener("mouseup", () => { dragging = false; });
+})();
+// Camera lock: instead of viewer.trackedEntity (which flies the camera to
+// the satellite and zooms in), we keep the user's current view and just
+// translate the camera by the satellite's per-frame ECI motion. Lets the
+// user pre-position the camera at whatever zoom/angle they like, then lock
+// without anything moving on screen.
+let cameraLockSat = null;
+let cameraLockLastSatPos = null;
+
+function setCameraLock(on) {
+  if (on && trackedSat) {
+    const jsDate = Cesium.JulianDate.toDate(viewer.clock.currentTime);
+    const pos = propagate(trackedSat, jsDate);
+    if (!pos) return;
+    cameraLockSat = trackedSat;
+    cameraLockLastSatPos = pos;
+  } else {
+    cameraLockSat = null;
+    cameraLockLastSatPos = null;
   }
+}
+
+viewer.scene.preRender.addEventListener(() => {
+  if (!cameraLockSat || !cameraLockLastSatPos) return;
+  const jsDate = Cesium.JulianDate.toDate(viewer.clock.currentTime);
+  const newPos = propagate(cameraLockSat, jsDate);
+  if (!newPos) return;
+  const delta = Cesium.Cartesian3.subtract(newPos, cameraLockLastSatPos, new Cesium.Cartesian3());
+  viewer.camera.position = Cesium.Cartesian3.add(
+    viewer.camera.position, delta, new Cesium.Cartesian3());
+  cameraLockLastSatPos = newPos;
+});
+
+document.getElementById("tracking-lock").addEventListener("click", () => {
+  if (!trackedSat) return;
+  setCameraLock(!cameraLockSat);
 });
 
 // ---------- Boot ----------
