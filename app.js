@@ -493,27 +493,48 @@ function drawFootprint(sat) {
 
 // ---------- Ground track ----------
 // Sub-satellite point trace over ±half-period centered on current clock.
-// clampToGround handles antimeridian wrap automatically.
-function drawGroundTrack(sat) {
+// clampToGround handles antimeridian wrap automatically. Recomputed by the
+// preUpdate listener below as simulation time advances so the line stays
+// centered on "now" rather than the moment the user clicked the satellite.
+const GROUND_TRACK_UPDATE_MS = 30 * 1000;   // recompute every 30 sim seconds
+const GROUND_TRACK_SAMPLES   = 240;
+let groundTrackLastMs = -Infinity;
+
+function computeGroundTrackPositions(sat, centerDate) {
   const periodMin = (2 * Math.PI) / sat.satrec.no;
   const halfMs = (periodMin / 2) * 60 * 1000;
-  const samples = 240;
-  const center = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+  const centerMs = centerDate.getTime();
   const positions = [];
-  for (let i = 0; i <= samples; i++) {
-    const t = new Date(center - halfMs + (2 * halfMs) * (i / samples));
+  for (let i = 0; i <= GROUND_TRACK_SAMPLES; i++) {
+    const t = new Date(centerMs - halfMs + (2 * halfMs) * (i / GROUND_TRACK_SAMPLES));
     const geo = subSatGeodetic(sat, t);
     if (geo) positions.push(
       Cesium.Cartesian3.fromRadians(geo.longitude, geo.latitude, 0));
   }
+  return positions;
+}
+
+function drawGroundTrack(sat) {
+  const center = Cesium.JulianDate.toDate(viewer.clock.currentTime);
   groundTrack = viewer.entities.add({
     polyline: {
-      positions, width: 2,
+      positions: computeGroundTrackPositions(sat, center),
+      width: 2,
       material: Cesium.Color.LIME.withAlpha(0.9),
       clampToGround: true,
     },
   });
+  groundTrackLastMs = center.getTime();
 }
+
+viewer.scene.preUpdate.addEventListener(() => {
+  if (!trackedSat || !groundTrack) return;
+  const simMs = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+  if (Math.abs(simMs - groundTrackLastMs) < GROUND_TRACK_UPDATE_MS) return;
+  groundTrackLastMs = simMs;
+  groundTrack.polyline.positions =
+    computeGroundTrackPositions(trackedSat, new Date(simMs));
+});
 
 // ---------- COS pass predictions ----------
 // Scan forward stepSec seconds at a time, detect periods where elevation at
