@@ -7,7 +7,7 @@ const GROUP_RULES = [
   { re: /^STARLINK/,                  label: "Starlink",        color: [255, 120, 120] },
   { re: /^ONEWEB/,                    label: "OneWeb",          color: [120, 180, 255] },
   { re: /^IRIDIUM/,                   label: "Iridium",         color: [255, 200, 120] },
-  { re: /^GPS BII?I?/,                label: "GPS",             color: [120, 255, 160] },
+  { re: /^NAVSTAR/,                   label: "GPS (NAVSTAR)",   color: [120, 255, 160] },
   { re: /^GALILEO/,                   label: "Galileo",         color: [180, 120, 255] },
   { re: /^(COSMOS \d+|GLONASS)/,      label: "GLONASS",         color: [255, 255, 120] },
   { re: /^BEIDOU/,                    label: "BeiDou",          color: [255, 160,  80] },
