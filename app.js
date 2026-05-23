@@ -712,13 +712,13 @@ document.getElementById("tracking-release").addEventListener("click", releaseTra
   document.addEventListener("mouseup", () => { dragging = false; });
 })();
 // Camera lock: keep the user's current view (no fly-to, no zoom) and just
-// shift the camera to follow the satellite. We freeze the camera→satellite
-// offset in ECEF at lock time, then each frame snap the camera to
-// (sat_position + frozen_offset). The user's zoom and view angle are
-// preserved because the offset already encodes them.
+// shift the camera by the satellite's per-frame motion delta. We track the
+// satellite's last position and use Cesium's `camera.move(dir, amount)` —
+// the documented API that actually updates the internal view matrix.
 let cameraLockSat = null;
-let cameraLockOffset = null; // Cartesian3: camera_pos - sat_pos at lock time
-const _lockTmp = new Cesium.Cartesian3();
+let cameraLockLastSatPos = null;
+const _lockDelta = new Cesium.Cartesian3();
+const _lockDir   = new Cesium.Cartesian3();
 
 function setCameraLock(on) {
   if (on && trackedSat) {
@@ -726,25 +726,25 @@ function setCameraLock(on) {
     const satPos = propagate(trackedSat, jsDate);
     if (!satPos) return;
     cameraLockSat = trackedSat;
-    cameraLockOffset = Cesium.Cartesian3.subtract(
-      viewer.camera.position, satPos, new Cesium.Cartesian3());
+    cameraLockLastSatPos = Cesium.Cartesian3.clone(satPos, new Cesium.Cartesian3());
   } else {
     cameraLockSat = null;
-    cameraLockOffset = null;
+    cameraLockLastSatPos = null;
   }
 }
 
 viewer.scene.preRender.addEventListener(() => {
-  if (!cameraLockSat || !cameraLockOffset) return;
+  if (!cameraLockSat || !cameraLockLastSatPos) return;
   const jsDate = Cesium.JulianDate.toDate(viewer.clock.currentTime);
-  const satPos = propagate(cameraLockSat, jsDate);
-  if (!satPos) return;
-  Cesium.Cartesian3.add(satPos, cameraLockOffset, _lockTmp);
-  // Mutate in place — assigning a new Cartesian3 to camera.position doesn't
-  // always propagate to Cesium's internal view matrix.
-  viewer.camera.position.x = _lockTmp.x;
-  viewer.camera.position.y = _lockTmp.y;
-  viewer.camera.position.z = _lockTmp.z;
+  const newPos = propagate(cameraLockSat, jsDate);
+  if (!newPos) return;
+  Cesium.Cartesian3.subtract(newPos, cameraLockLastSatPos, _lockDelta);
+  const dist = Cesium.Cartesian3.magnitude(_lockDelta);
+  if (dist > 0.001) {
+    Cesium.Cartesian3.divideByScalar(_lockDelta, dist, _lockDir);
+    viewer.camera.move(_lockDir, dist);
+  }
+  Cesium.Cartesian3.clone(newPos, cameraLockLastSatPos);
 });
 
 document.getElementById("tracking-lock").addEventListener("click", () => {
