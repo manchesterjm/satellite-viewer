@@ -112,36 +112,54 @@ function ringPositions(subLat, subLon, angDeg, samples = 180) {
 //   90°–96°  = civil twilight (sun 0° → -6°)
 //   96°–102° = nautical twilight (sun -6° → -12°)
 //   102°–108° = astronomical twilight (sun -12° → -18°)
-const twilightEntities = [];
+//
+// Polygons with holes are too slow to retriangulate every frame; we throttle
+// updates to once every 10 simulation seconds (sub-solar moves ~0.04° in that
+// time — well below pixel resolution at any reasonable zoom).
+const TWILIGHT_BANDS = [
+  { inner: 90,  outer: 96,  color: "#ffb84d", alpha: 0.18 },
+  { inner: 96,  outer: 102, color: "#4d6bb8", alpha: 0.22 },
+  { inner: 102, outer: 108, color: "#1a2654", alpha: 0.25 },
+];
+const twilightEntities = []; // [{entity, inner, outer}]
+let twilightLastMs = -Infinity;
 
-function makeTwilightBand(innerDeg, outerDeg, color) {
-  return viewer.entities.add({
-    polygon: {
-      hierarchy: new Cesium.CallbackProperty(time => {
-        const jsDate = Cesium.JulianDate.toDate(time);
-        const sub = sunSubpoint(jsDate);
-        const outer = ringPositions(sub.lat, sub.lon, outerDeg);
-        const inner = ringPositions(sub.lat, sub.lon, innerDeg);
-        return new Cesium.PolygonHierarchy(outer, [new Cesium.PolygonHierarchy(inner)]);
-      }, false),
-      material: color,
-      height: 0,
-    },
-  });
+function rebuildTwilight(jsDate) {
+  const sub = sunSubpoint(jsDate);
+  for (const b of twilightEntities) {
+    b.entity.polygon.hierarchy = new Cesium.PolygonHierarchy(
+      ringPositions(sub.lat, sub.lon, b.outer, 90),
+      [new Cesium.PolygonHierarchy(ringPositions(sub.lat, sub.lon, b.inner, 90))]
+    );
+  }
 }
 
 function setTwilightVisible(on) {
   if (on && twilightEntities.length === 0) {
-    twilightEntities.push(
-      makeTwilightBand(90,  96,  Cesium.Color.fromCssColorString("#ffb84d").withAlpha(0.18)),
-      makeTwilightBand(96,  102, Cesium.Color.fromCssColorString("#4d6bb8").withAlpha(0.22)),
-      makeTwilightBand(102, 108, Cesium.Color.fromCssColorString("#1a2654").withAlpha(0.25)),
-    );
+    for (const spec of TWILIGHT_BANDS) {
+      const entity = viewer.entities.add({
+        polygon: {
+          hierarchy: new Cesium.PolygonHierarchy([], []),
+          material: Cesium.Color.fromCssColorString(spec.color).withAlpha(spec.alpha),
+          height: 0,
+        },
+      });
+      twilightEntities.push({ entity, inner: spec.inner, outer: spec.outer });
+    }
+    twilightLastMs = -Infinity; // force an immediate update on next frame
   } else if (!on) {
-    for (const e of twilightEntities) viewer.entities.remove(e);
+    for (const b of twilightEntities) viewer.entities.remove(b.entity);
     twilightEntities.length = 0;
   }
 }
+
+viewer.scene.preUpdate.addEventListener(() => {
+  if (twilightEntities.length === 0) return;
+  const simMs = Cesium.JulianDate.toDate(viewer.clock.currentTime).getTime();
+  if (Math.abs(simMs - twilightLastMs) < 10000) return;
+  twilightLastMs = simMs;
+  rebuildTwilight(new Date(simMs));
+});
 
 // ---------- Cloud cover overlay (CIMSS RealEarth) ----------
 // 3 geostationary satellites' clean-IR Band 13/09: G16 (Americas),
