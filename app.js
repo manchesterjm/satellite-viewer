@@ -711,45 +711,16 @@ document.getElementById("tracking-release").addEventListener("click", releaseTra
   });
   document.addEventListener("mouseup", () => { dragging = false; });
 })();
-// Camera lock: keep the user's current view (no fly-to, no zoom) and just
-// shift the camera by the satellite's per-frame motion delta. We track the
-// satellite's last position and use Cesium's `camera.move(dir, amount)` —
-// the documented API that actually updates the internal view matrix.
-let cameraLockSat = null;
-let cameraLockLastSatPos = null;
-const _lockDelta = new Cesium.Cartesian3();
-const _lockDir   = new Cesium.Cartesian3();
-
+// Camera lock toggles Cesium's built-in trackedEntity follow mode. This flies
+// the camera to the satellite and zooms in — by design. Click again to release.
 function setCameraLock(on) {
-  if (on && trackedSat) {
-    const jsDate = Cesium.JulianDate.toDate(viewer.clock.currentTime);
-    const satPos = propagate(trackedSat, jsDate);
-    if (!satPos) return;
-    cameraLockSat = trackedSat;
-    cameraLockLastSatPos = Cesium.Cartesian3.clone(satPos, new Cesium.Cartesian3());
-  } else {
-    cameraLockSat = null;
-    cameraLockLastSatPos = null;
-  }
+  if (on && trackedEntity) viewer.trackedEntity = trackedEntity;
+  else viewer.trackedEntity = undefined;
 }
 
-viewer.scene.preRender.addEventListener(() => {
-  if (!cameraLockSat || !cameraLockLastSatPos) return;
-  const jsDate = Cesium.JulianDate.toDate(viewer.clock.currentTime);
-  const newPos = propagate(cameraLockSat, jsDate);
-  if (!newPos) return;
-  Cesium.Cartesian3.subtract(newPos, cameraLockLastSatPos, _lockDelta);
-  const dist = Cesium.Cartesian3.magnitude(_lockDelta);
-  if (dist > 0.001) {
-    Cesium.Cartesian3.divideByScalar(_lockDelta, dist, _lockDir);
-    viewer.camera.move(_lockDir, dist);
-  }
-  Cesium.Cartesian3.clone(newPos, cameraLockLastSatPos);
-});
-
 document.getElementById("tracking-lock").addEventListener("click", () => {
-  if (!trackedSat) return;
-  setCameraLock(!cameraLockSat);
+  if (!trackedEntity) return;
+  setCameraLock(viewer.trackedEntity !== trackedEntity);
 });
 
 // ---------- Boot ----------
