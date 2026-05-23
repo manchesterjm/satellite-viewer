@@ -645,6 +645,25 @@ document.addEventListener("keydown", e => {
 document.getElementById("cloud-toggle").addEventListener("change", e => {
   setCloudCoverVisible(e.target.checked);
 });
+document.getElementById("btn-center").addEventListener("click", () => {
+  // Release any tracking before flying home, otherwise the camera lock fights
+  // the fly-home animation.
+  if (viewer.trackedEntity) viewer.trackedEntity = undefined;
+  viewer.camera.flyHome(1.2);
+});
+document.getElementById("btn-north").addEventListener("click", () => {
+  // Reset heading to north-up and roll to zero. Keep current position and pitch
+  // so the user doesn't lose their zoom level.
+  viewer.camera.flyTo({
+    destination: viewer.camera.positionWC.clone(),
+    orientation: {
+      heading: 0,
+      pitch: viewer.camera.pitch,
+      roll: 0,
+    },
+    duration: 0.6,
+  });
+});
 document.getElementById("twilight-toggle").addEventListener("change", e => {
   setTwilightVisible(e.target.checked);
 });
