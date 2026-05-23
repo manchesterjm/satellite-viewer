@@ -166,26 +166,44 @@ viewer.scene.preUpdate.addEventListener(() => {
 // Met11 (Europe/Africa), Himawari (Asia/Pacific). EPSG:4326 tiles, ~30 min
 // update cadence, no API key needed. Each layer is transparent outside its
 // satellite's footprint, so overlaying all three gives near-global coverage.
+// Each satellite only has data within ~60° of its sub-satellite longitude.
+// Bounding rectangles below restrict tile requests to each product's footprint
+// so CIMSS doesn't return its watermarked "no data" tile outside that region.
+// Rectangles overlap so combined coverage is global.
 const CLOUD_PRODUCTS = [
-  "G16-C-BAND13",          // GOES-East — Americas
-  "Met11-SEVIRI-FD-BAND09",// Meteosat-11 at 0° — Europe/Africa
-  "Met8-SEVIRI-FD-BAND09", // Meteosat-8 at 41.5°E — Indian Ocean
-  "HIMAWARI-B13",          // Himawari at 140°E — Asia/Pacific
+  // GOES-19 East at 75.2°W — west to 165°W, east to 15°W
+  { id: "G19-ABI-FD-BAND13",      west: -165, south: -65, east:  -15, north: 65 },
+  // GOES-18 West at 137.0°W — Cesium rectangles can't cross antimeridian,
+  // so cover the eastern half here; the western half is picked up by Himawari.
+  { id: "G18-ABI-FD-BAND13",      west: -180, south: -65, east:  -80, north: 65 },
+  // Meteosat-11 at 0.0° — Europe / Africa / S. Atlantic
+  { id: "Met11-SEVIRI-FD-BAND09", west:  -50, south: -65, east:   60, north: 65 },
+  // Meteosat-8 at 41.5°E — Indian Ocean / Middle East / Central Asia
+  { id: "Met8-SEVIRI-FD-BAND09",  west:  -15, south: -65, east:  105, north: 65 },
+  // Himawari at 140.7°E — covers everything east of ~80°E to 180°
+  { id: "HIMAWARI-B13",           west:   80, south: -65, east:  180, north: 65 },
 ];
 const cloudLayers = [];
+
+// Per-page-load token so we never re-serve watermarked tiles that were cached
+// when the page ran without an access key.
+const CLOUD_CACHE_BUST = Date.now();
 
 function setCloudCoverVisible(on) {
   if (on) {
     const keyParam = window.CIMSS_ACCESS_KEY
       ? `&accesskey=${encodeURIComponent(window.CIMSS_ACCESS_KEY)}` : "";
-    for (const product of CLOUD_PRODUCTS) {
+    for (const p of CLOUD_PRODUCTS) {
       const provider = new Cesium.UrlTemplateImageryProvider({
-        url: `https://realearth.ssec.wisc.edu/api/image?products=${product}&x={x}&y={y}&z={z}${keyParam}`,
+        url: `https://realearth.ssec.wisc.edu/api/image?products=${p.id}&x={x}&y={y}&z={z}${keyParam}&_=${CLOUD_CACHE_BUST}`,
         tilingScheme: new Cesium.GeographicTilingScheme(),
-        maximumLevel: 8,
+        maximumLevel: 7, // CIMSS products are maxzoom=7
         credit: "Imagery © UW-Madison SSEC / CIMSS RealEarth",
       });
       const layer = viewer.imageryLayers.addImageryProvider(provider);
+      // Restrict to the satellite's footprint so we don't fetch watermarked
+      // "no data" tiles from products that don't cover this region.
+      layer.rectangle = Cesium.Rectangle.fromDegrees(p.west, p.south, p.east, p.north);
       layer.alpha = 0.6;
       cloudLayers.push(layer);
     }
