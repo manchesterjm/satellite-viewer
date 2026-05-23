@@ -14,6 +14,7 @@ const GROUP_RULES = [
   { re: /^GLOBALSTAR/,                label: "Globalstar",      color: [200, 200, 255] },
   { re: /^O3B/,                       label: "O3b MEO",         color: [120, 220, 220] },
   { re: /^(FLOCK|PLANET)/,            label: "Planet Labs",     color: [220, 120, 220] },
+  { re: /^ISS \(ZARYA\)/,             label: "ISS (ZARYA)",     color: [ 80, 255, 255] },
   { re: /^(ISS|TIANGONG|CSS|TIANHE)/, label: "Crewed stations", color: [255,  80,  80] },
   { re: /^(USA |OPS )/,               label: "US military",     color: [180, 180, 180] },
 ];
