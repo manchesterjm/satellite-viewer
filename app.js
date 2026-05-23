@@ -52,12 +52,108 @@ viewer.clock.multiplier   = 1;
 viewer.clock.shouldAnimate = true;
 viewer.timeline.zoomTo(viewer.clock.startTime, viewer.clock.stopTime);
 
+// ---------- Sun position helpers ----------
+// Low-precision sub-solar point (sun directly overhead) — accurate to ~0.01°,
+// more than enough for terminator + twilight visualization.
+function sunSubpoint(jsDate) {
+  const n = (jsDate.getTime() - Date.UTC(2000, 0, 1, 12)) / 86400000;
+  const L = (280.460 + 0.9856474 * n) * Math.PI / 180;
+  const g = (357.528 + 0.9856003 * n) * Math.PI / 180;
+  const lam = L + (1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * Math.PI / 180;
+  const eps = 23.439 * Math.PI / 180;
+  const ra  = Math.atan2(Math.cos(eps) * Math.sin(lam), Math.cos(lam));
+  const dec = Math.asin(Math.sin(eps) * Math.sin(lam));
+  const gmst = satellite.gstime(jsDate);
+  let lon = ra - gmst;
+  while (lon >  Math.PI) lon -= 2 * Math.PI;
+  while (lon < -Math.PI) lon += 2 * Math.PI;
+  return { lat: dec, lon };
+}
+
+function sunECEFkm(jsDate) {
+  // Sun position in Earth-fixed frame (km), from low-precision formulas.
+  const sub = sunSubpoint(jsDate);
+  const auKm = 149597870.7;
+  return {
+    x: auKm * Math.cos(sub.lat) * Math.cos(sub.lon),
+    y: auKm * Math.cos(sub.lat) * Math.sin(sub.lon),
+    z: auKm * Math.sin(sub.lat),
+  };
+}
+
+function sunElevationAt(observer, jsDate) {
+  const ecf = sunECEFkm(jsDate);
+  return satellite.ecfToLookAngles(observer, ecf).elevation;
+}
+
+// Spherical small-circle: point at angular distance angRad from (lat0,lon0)
+// along bearing brg (radians clockwise from north).
+function pointAtAng(lat0, lon0, angRad, brg) {
+  const sinLat = Math.sin(lat0) * Math.cos(angRad) +
+                 Math.cos(lat0) * Math.sin(angRad) * Math.cos(brg);
+  const lat = Math.asin(sinLat);
+  const lon = lon0 + Math.atan2(
+    Math.sin(brg) * Math.sin(angRad) * Math.cos(lat0),
+    Math.cos(angRad) - Math.sin(lat0) * sinLat);
+  return Cesium.Cartesian3.fromRadians(lon, lat, 0);
+}
+
+function ringPositions(subLat, subLon, angDeg, samples = 180) {
+  const ang = Cesium.Math.toRadians(angDeg);
+  const out = [];
+  for (let i = 0; i < samples; i++) {
+    out.push(pointAtAng(subLat, subLon, ang, 2 * Math.PI * i / samples));
+  }
+  return out;
+}
+
+// ---------- Twilight bands ----------
+// Three translucent rings on the night side of the geometric terminator:
+//   90°–96°  = civil twilight (sun 0° → -6°)
+//   96°–102° = nautical twilight (sun -6° → -12°)
+//   102°–108° = astronomical twilight (sun -12° → -18°)
+const twilightEntities = [];
+
+function makeTwilightBand(innerDeg, outerDeg, color) {
+  return viewer.entities.add({
+    polygon: {
+      hierarchy: new Cesium.CallbackProperty(time => {
+        const jsDate = Cesium.JulianDate.toDate(time);
+        const sub = sunSubpoint(jsDate);
+        const outer = ringPositions(sub.lat, sub.lon, outerDeg);
+        const inner = ringPositions(sub.lat, sub.lon, innerDeg);
+        return new Cesium.PolygonHierarchy(outer, [new Cesium.PolygonHierarchy(inner)]);
+      }, false),
+      material: color,
+      height: 0,
+    },
+  });
+}
+
+function setTwilightVisible(on) {
+  if (on && twilightEntities.length === 0) {
+    twilightEntities.push(
+      makeTwilightBand(90,  96,  Cesium.Color.fromCssColorString("#ffb84d").withAlpha(0.18)),
+      makeTwilightBand(96,  102, Cesium.Color.fromCssColorString("#4d6bb8").withAlpha(0.22)),
+      makeTwilightBand(102, 108, Cesium.Color.fromCssColorString("#1a2654").withAlpha(0.25)),
+    );
+  } else if (!on) {
+    for (const e of twilightEntities) viewer.entities.remove(e);
+    twilightEntities.length = 0;
+  }
+}
+
 // ---------- Cloud cover overlay (CIMSS RealEarth) ----------
 // 3 geostationary satellites' clean-IR Band 13/09: G16 (Americas),
 // Met11 (Europe/Africa), Himawari (Asia/Pacific). EPSG:4326 tiles, ~30 min
 // update cadence, no API key needed. Each layer is transparent outside its
 // satellite's footprint, so overlaying all three gives near-global coverage.
-const CLOUD_PRODUCTS = ["G16-C-BAND13", "Met11-SEVIRI-FD-BAND09", "HIMAWARI-B13"];
+const CLOUD_PRODUCTS = [
+  "G16-C-BAND13",          // GOES-East — Americas
+  "Met11-SEVIRI-FD-BAND09",// Meteosat-11 at 0° — Europe/Africa
+  "Met8-SEVIRI-FD-BAND09", // Meteosat-8 at 41.5°E — Indian Ocean
+  "HIMAWARI-B13",          // Himawari at 140°E — Asia/Pacific
+];
 const cloudLayers = [];
 
 function setCloudCoverVisible(on) {
@@ -385,12 +481,30 @@ function drawGroundTrack(sat) {
 // Scan forward stepSec seconds at a time, detect periods where elevation at
 // COS observer is ≥ MIN_ELEVATION_DEG. Record AOS, LOS, peak elevation, and
 // rough start/end compass direction. Returns up to maxPasses upcoming.
+// Earth's umbra is approximately cylindrical for satellites near Earth.
+// Satellite is lit if it's on the sun-facing hemisphere OR if it's on the
+// far side but outside Earth's shadow cylinder. (All vectors in km.)
+function satIsSunlit(satPosKm, sunPosKm) {
+  const sx = satPosKm.x, sy = satPosKm.y, sz = satPosKm.z;
+  const ux = sunPosKm.x, uy = sunPosKm.y, uz = sunPosKm.z;
+  const sunMag = Math.hypot(ux, uy, uz);
+  const nx = ux / sunMag, ny = uy / sunMag, nz = uz / sunMag;
+  const parallel = sx * nx + sy * ny + sz * nz;
+  if (parallel >= 0) return true; // sun-facing side
+  // perpendicular distance from sun-Earth line
+  const px = sx - parallel * nx;
+  const py = sy - parallel * ny;
+  const pz = sz - parallel * nz;
+  return Math.hypot(px, py, pz) > 6378.137;
+}
+
 function predictPasses(sat, fromDate, hours = 48, maxPasses = 6) {
   const stepSec = 30;
   const minEl = Cesium.Math.toRadians(MIN_ELEVATION_DEG);
+  const civilDark = Cesium.Math.toRadians(-6); // sun ≤ -6° at observer
   const passes = [];
   let inPass = false;
-  let aos = null, aosAz = 0, peakEl = 0, peakTime = null;
+  let aos = null, aosAz = 0, peakEl = 0, peakTime = null, visible = false;
   for (let s = 0; s < hours * 3600; s += stepSec) {
     const t = new Date(fromDate.getTime() + s * 1000);
     const pv = satellite.propagate(sat.satrec, t);
@@ -399,16 +513,23 @@ function predictPasses(sat, fromDate, hours = 48, maxPasses = 6) {
     const ecf = satellite.eciToEcf(pv.position, gmst);
     const look = satellite.ecfToLookAngles(COS_OBSERVER, ecf);
     if (look.elevation >= minEl) {
+      // Naked-eye check: observer in twilight/dark AND satellite still in sunlight
+      const sunPos = sunECEFkm(t);
+      const sunEl  = satellite.ecfToLookAngles(COS_OBSERVER, sunPos).elevation;
+      const sunlit = satIsSunlit({ x: ecf.x, y: ecf.y, z: ecf.z }, sunPos);
+      const isVisible = (sunEl <= civilDark) && sunlit;
       if (!inPass) {
         inPass = true;
         aos = t; aosAz = look.azimuth;
         peakEl = look.elevation; peakTime = t;
-      } else if (look.elevation > peakEl) {
-        peakEl = look.elevation; peakTime = t;
+        visible = isVisible;
+      } else {
+        if (look.elevation > peakEl) { peakEl = look.elevation; peakTime = t; }
+        if (isVisible) visible = true;
       }
     } else if (inPass) {
-      passes.push({ aos, los: t, aosAz, losAz: look.azimuth, peakEl, peakTime });
-      inPass = false;
+      passes.push({ aos, los: t, aosAz, losAz: look.azimuth, peakEl, peakTime, visible });
+      inPass = false; visible = false;
       if (passes.length >= maxPasses) break;
     }
   }
@@ -451,8 +572,9 @@ function showPasses(sat) {
     const rows = passes.map(p => {
       const peakDeg = (p.peakEl * 180 / Math.PI).toFixed(0);
       const dur = fmtDuration(p.los - p.aos);
-      return `<div class="pass">
-        <div class="pass-time">${fmtLocal(p.aos)} → ${fmtLocal(p.los).split(" ").pop()}</div>
+      const tag = p.visible ? `<span class="pass-visible" title="Naked-eye visible: sat sunlit, observer in twilight or darker">⭐</span>` : "";
+      return `<div class="pass${p.visible ? " visible" : ""}">
+        <div class="pass-time">${tag}${fmtLocal(p.aos)} → ${fmtLocal(p.los).split(" ").pop()}</div>
         <div class="pass-meta">peak ${peakDeg}° · ${dur} · ${compass(p.aosAz)}→${compass(p.losAz)}</div>
       </div>`;
     }).join("");
@@ -484,6 +606,9 @@ document.addEventListener("keydown", e => {
 });
 document.getElementById("cloud-toggle").addEventListener("change", e => {
   setCloudCoverVisible(e.target.checked);
+});
+document.getElementById("twilight-toggle").addEventListener("change", e => {
+  setTwilightVisible(e.target.checked);
 });
 document.getElementById("tracking-release").addEventListener("click", releaseTracking);
 document.getElementById("tracking-lock").addEventListener("click", () => {

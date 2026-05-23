@@ -53,6 +53,8 @@ html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; font-family:
 #passes .pass { font-size: 11px; padding: 5px 0; border-bottom: 1px solid #222; }
 #passes .pass:last-child { border-bottom: none; }
 #passes .pass-time { color: #eee; font-family: monospace; }
+#passes .pass.visible { background: rgba(255, 220, 100, 0.06); }
+#passes .pass-visible { margin-right: 4px; }
 #passes .pass-meta { color: #aaa; font-size: 10px; margin-top: 2px; }
 
 #cesium-container {
