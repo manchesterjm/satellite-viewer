@@ -256,6 +256,16 @@ function cloudCoverAt(jsDate) {
 }
 
 // ---------- TLE load + parse ----------
+// Alpha-5: catalog numbers past 99999 encode the first digit as a letter
+// (A0000 = 100000 … Z9999 = 339999; I and O unused). USSF stopgap, live since
+// NORAD 100000 (Saramago) was cataloged 2026-07-11.
+const ALPHA5_LETTERS = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+function decodeCatalogNumber(field) {
+  const letterValue = ALPHA5_LETTERS.indexOf(field[0]);
+  if (letterValue < 0) return parseInt(field, 10);
+  return (10 + letterValue) * 10000 + parseInt(field.slice(1), 10);
+}
+
 async function loadTLEs() {
   const resp = await fetch("data/full_catalog.tle");
   if (!resp.ok) throw new Error(`Failed to fetch TLE: ${resp.status}`);
@@ -267,7 +277,7 @@ async function loadTLEs() {
     const l1   = (lines[i+1] || "").trim();
     const l2   = (lines[i+2] || "").trim();
     if (!name || !l1.startsWith("1 ") || !l2.startsWith("2 ")) continue;
-    const noradId = parseInt(l1.slice(2, 7), 10);
+    const noradId = decodeCatalogNumber(l1.slice(2, 7));
     let group = "Other", color = OTHER_COLOR;
     for (const rule of GROUP_RULES) {
       if (rule.re.test(name)) { group = rule.label; color = rule.color; break; }
