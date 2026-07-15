@@ -232,6 +232,29 @@ const COS_OBSERVER = {
   height:    1.890, // km, ~6,200 ft elevation
 };
 
+// ---------- NWS cloud-cover forecast (drives pass-visibility tag) ----------
+// Refreshed hourly by D:\Scripts\weather_logger.py; covers ~6 days from issue time.
+let CLOUD_FORECAST = null;
+async function loadCloudForecast() {
+  try {
+    const r = await fetch("data/cloud_forecast.json", { cache: "no-store" });
+    if (!r.ok) return;
+    CLOUD_FORECAST = await r.json();
+  } catch (_) { /* non-fatal — pass tags just won't appear */ }
+}
+
+// Nearest-hour lookup with a 90-minute tolerance window. Returns 0–100 or null.
+function cloudCoverAt(jsDate) {
+  if (!CLOUD_FORECAST || !CLOUD_FORECAST.hourly || !CLOUD_FORECAST.hourly.length) return null;
+  const target = jsDate.getTime();
+  let best = null, bestDiff = Infinity;
+  for (const h of CLOUD_FORECAST.hourly) {
+    const diff = Math.abs(new Date(h.time).getTime() - target);
+    if (diff < bestDiff) { bestDiff = diff; best = h; }
+  }
+  return bestDiff <= 90 * 60 * 1000 ? best.sky_cover : null;
+}
+
 // ---------- TLE load + parse ----------
 async function loadTLEs() {
   const resp = await fetch("data/full_catalog.tle");
@@ -634,8 +657,20 @@ function showPasses(sat) {
       const peakDeg = (p.peakEl * 180 / Math.PI).toFixed(0);
       const dur = fmtDuration(p.los - p.aos);
       const tag = p.visible ? `<span class="pass-visible" title="Naked-eye visible: sat sunlit, observer in twilight or darker">⭐</span>` : "";
-      return `<div class="pass${p.visible ? " visible" : ""}">
-        <div class="pass-time">${tag}${fmtLocal(p.aos)} → ${fmtLocal(p.los).split(" ").pop()}</div>
+      const sky = cloudCoverAt(p.peakTime || p.aos);
+      let cloudTag = "";
+      let cloudClass = "";
+      if (sky !== null) {
+        if (sky >= 70) {
+          cloudTag = ` <span class="pass-cloud cloudy" title="NWS forecast sky cover ${sky}% at pass peak">(forecast cloudy, might not see)</span>`;
+          cloudClass = " clouded";
+        } else if (sky >= 40) {
+          cloudTag = ` <span class="pass-cloud partly" title="NWS forecast sky cover ${sky}% at pass peak">(partly cloudy)</span>`;
+          cloudClass = " partly-clouded";
+        }
+      }
+      return `<div class="pass${p.visible ? " visible" : ""}${cloudClass}">
+        <div class="pass-time">${tag}${fmtLocal(p.aos)} → ${fmtLocal(p.los).split(" ").pop()}${cloudTag}</div>
         <div class="pass-meta">peak ${peakDeg}° · ${dur} · ${compass(p.aosAz)}→${compass(p.losAz)}</div>
       </div>`;
     }).join("");
@@ -733,6 +768,7 @@ document.getElementById("tracking-lock").addEventListener("click", () => {
     status.textContent = "Failed to load TLE: " + e.message;
     return;
   }
+  loadCloudForecast();  // fire-and-forget; pass tags appear once it lands
   buildGroupsUI();
   setupSearch();
   updateStatus();

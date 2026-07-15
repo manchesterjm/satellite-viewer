@@ -1,7 +1,8 @@
 # Create-TLERefreshTask.ps1
 # One-time admin script to register the "TLE Catalog Refresh" scheduled task.
-# Runs Refresh-TLEs.ps1 every 3 days at 03:30 local time. Hidden window
-# (PowerShell -WindowStyle Hidden, matching the weather-task pattern).
+# Runs Refresh-TLEs.ps1 every 6 hours starting at 03:30 local (03:30, 09:30,
+# 15:30, 21:30). Hidden window (PowerShell -WindowStyle Hidden, matching the
+# weather-task pattern).
 
 $taskName = "TLE Catalog Refresh"
 $script   = "D:\Scripts\Refresh-TLEs.ps1"
@@ -12,8 +13,10 @@ $action = New-ScheduledTaskAction `
 
 $trigger = New-ScheduledTaskTrigger `
     -Daily `
-    -DaysInterval 3 `
     -At "03:30"
+$trigger.Repetition = (New-ScheduledTaskTrigger -Once -At "03:30" `
+    -RepetitionInterval (New-TimeSpan -Hours 6) `
+    -RepetitionDuration (New-TimeSpan -Hours 24)).Repetition
 
 $settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
@@ -32,7 +35,7 @@ Register-ScheduledTask `
     -Trigger $trigger `
     -Settings $settings `
     -Principal $principal `
-    -Description "Pull fresh CelesTrak full satellite catalog every 3 days for the satellite viewer." `
+    -Description "Pull fresh CelesTrak full satellite catalog every 6 hours for the satellite viewer." `
     -Force
 
 Write-Host "Registered task '$taskName'. Next run: $((Get-ScheduledTask -TaskName $taskName | Get-ScheduledTaskInfo).NextRunTime)"
